@@ -1,0 +1,18 @@
+{
+  "development": {
+    "dialect": "postgres",
+    "host": "localhost",
+    "port": 5590,
+    "username": "user",
+    "password": "password",
+    "database": "task-dev"
+  },
+  "test": {
+    "dialect": "postgres",
+    "host": "localhost",
+    "port": 5590,
+    "username": "user",
+    "password": "password",
+    "database": "task-test"
+  }
+}
