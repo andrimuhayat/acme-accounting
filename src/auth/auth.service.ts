@@ -55,8 +55,15 @@ export class AuthService {
    */
   async login(email: string, password: string): Promise<LoginResponse> {
     try {
-      // Validate input - check null/undefined first before calling isValidEmail
-      if (email === null || email === undefined || email.trim().length === 0) {
+      // Validate input - check null/undefined FIRST before calling any method on email
+      if (email === null || email === undefined) {
+        return {
+          success: false,
+          message: 'Email and password are required',
+        };
+      }
+
+      if (!email || email.trim().length === 0) {
         return {
           success: false,
           message: 'Email and password are required',
@@ -70,7 +77,14 @@ export class AuthService {
         };
       }
 
-      if (password === null || password === undefined || password.trim().length === 0) {
+      if (password === null || password === undefined) {
+        return {
+          success: false,
+          message: 'Email and password are required',
+        };
+      }
+
+      if (!password || password.trim().length === 0) {
         return {
           success: false,
           message: 'Email and password are required',
