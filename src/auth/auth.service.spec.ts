@@ -94,9 +94,9 @@ describe('AuthService', () => {
     });
 
     describe('error cases', () => {
-      it('should reject login with invalid email', async () => {
+      it('should reject login with invalid email format', async () => {
         // Arrange
-        const email = 'nonexistent@example.com';
+        const email = 'notanemail';
         const password = 'password123';
 
         // Act
@@ -104,7 +104,7 @@ describe('AuthService', () => {
 
         // Assert
         expect(result.success).toBe(false);
-        expect(result.message).toBe('Invalid credentials');
+        expect(result.message).toBe('Invalid email address provided');
         expect(result.token).toBeUndefined();
       });
 
