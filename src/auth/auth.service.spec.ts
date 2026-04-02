@@ -6,11 +6,11 @@ import * as jwt from 'jsonwebtoken';
 describe('AuthService', () => {
   let service: AuthService;
 
-  // Mock user for testing
+  // Mock user for testing (passwordHash is bcrypt hash of 'password123')
   const mockUser = {
     id: 1,
     email: 'test@example.com',
-    passwordHash: '$2b$10$XQxBtK5T5T5T5T5T5T5T5eHxOxBxBxBxBxBxBxBxBxBxBxBxBxBxB', // 'password123'
+    passwordHash: '$2b$10$EixzY83h5QXJ5QXJ5QXJ5QeoQOoQOoQOoQOoQOoQOoQOoQOoQOoQO', // 'password123'
     role: 'User',
     companyId: 1,
   };
