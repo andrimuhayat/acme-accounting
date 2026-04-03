@@ -38,10 +38,21 @@ export class AuthService {
   private userSessionMap: Map<number, string> = new Map(); // userId -> token (for single session enforcement)
   private readonly JWT_SECRET = (() => {
     const secret = process.env.JWT_SECRET;
-    if (!secret && process.env.NODE_ENV === 'production') {
-      throw new Error('JWT_SECRET environment variable is required in production');
+    if (!secret) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('JWT_SECRET environment variable is required in production');
+      }
+      // WARNING: Using weak fallback in development only - never in production
+      // In production, use proper secrets manager:
+      // - AWS Secrets Manager / AWS SSM Parameter Store
+      // - HashiCorp Vault
+      // - GCP Secret Manager
+      // - Azure Key Vault
+      // - Kubernetes Secrets (with external secrets operator)
+      console.warn('WARNING: JWT_SECRET not set. Using weak fallback secret. DO NOT use in production.');
+      return 'acme-fallback-dev-only-32chars!!';
     }
-    return secret || 'acme-secret-key-change-in-production';
+    return secret;
   })();
   private readonly JWT_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
   private readonly BCRYPT_ROUNDS = 10;
@@ -142,9 +153,10 @@ export class AuthService {
         userId,
       };
     } catch (error) {
+      // Return generic error message to avoid leaking internal implementation details
       return {
         success: false,
-        message: `Error during login: ${error.message}`,
+        message: 'Login failed. Please try again.',
       };
     }
   }
@@ -189,6 +201,17 @@ export class AuthService {
   async logout(token: string): Promise<LogoutResponse> {
     try {
       if (!token || typeof token !== 'string') {
+        return {
+          success: false,
+          message: 'Invalid or missing token',
+        };
+      }
+
+      // CRITICAL: Verify token is valid before invalidating session
+      let decoded: { userId: number; email: string };
+      try {
+        decoded = jwt.verify(token, this.JWT_SECRET) as { userId: number; email: string };
+      } catch (error) {
         return {
           success: false,
           message: 'Invalid or missing token',

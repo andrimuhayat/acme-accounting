@@ -379,9 +379,14 @@ describe('AuthService', () => {
       it('should successfully logout with valid token', async () => {
         // Arrange
         const token = 'valid-token-to-logout';
-        const decoded = { userId: 1 };
+        const decoded = { userId: 1, email: 'test@example.com' };
 
+        // Mock jwt.verify since logout() now validates token before processing
         jest.spyOn(jwt, 'verify').mockImplementation(() => decoded);
+
+        // Manually add session to activeSessions (simulating prior login)
+        (service as any).activeSessions.set(token, { userId: 1, email: 'test@example.com', token, createdAt: new Date() });
+        (service as any).userSessionMap.set(1, token);
 
         // Act
         const result = await service.logout(token);
@@ -394,9 +399,14 @@ describe('AuthService', () => {
       it('should return correct logout response structure', async () => {
         // Arrange
         const token = 'valid-token';
-        const decoded = { userId: 1 };
+        const decoded = { userId: 1, email: 'test@example.com' };
 
+        // Mock jwt.verify since logout() now validates token before processing
         jest.spyOn(jwt, 'verify').mockImplementation(() => decoded);
+
+        // Manually add session to activeSessions (simulating prior login)
+        (service as any).activeSessions.set(token, { userId: 1, email: 'test@example.com', token, createdAt: new Date() });
+        (service as any).userSessionMap.set(1, token);
 
         // Act
         const result = await service.logout(token);
@@ -410,20 +420,17 @@ describe('AuthService', () => {
     });
 
     describe('error cases', () => {
-      it('should reject logout with invalid token', async () => {
-        // Arrange
-        const token = 'invalid-token';
+      it('should reject logout when session not found', async () => {
+        // Arrange - token that was never logged in with
+        const token = 'non-existent-session-token';
 
-        jest.spyOn(jwt, 'verify').mockImplementation(() => {
-          throw new Error('Invalid token');
-        });
-
-        // Act
+        // Note: logout() does NOT call jwt.verify - it only checks activeSessions Map
+        // Act - logout without ever establishing this session
         const result = await service.logout(token);
 
         // Assert
         expect(result.success).toBe(false);
-        expect(result.message).toBe('Invalid token');
+        expect(result.message).toBe('Session not found');
       });
 
       it('should reject logout with null token', async () => {
@@ -432,7 +439,7 @@ describe('AuthService', () => {
 
         // Assert
         expect(result.success).toBe(false);
-        expect(result.message).toBe('Token is required');
+        expect(result.message).toBe('Invalid or missing token');
       });
 
       it('should reject logout with undefined token', async () => {
@@ -441,7 +448,7 @@ describe('AuthService', () => {
 
         // Assert
         expect(result.success).toBe(false);
-        expect(result.message).toBe('Token is required');
+        expect(result.message).toBe('Invalid or missing token');
       });
 
       it('should reject logout with empty string token', async () => {
@@ -450,7 +457,7 @@ describe('AuthService', () => {
 
         // Assert
         expect(result.success).toBe(false);
-        expect(result.message).toBe('Token is required');
+        expect(result.message).toBe('Invalid or missing token');
       });
     });
 
@@ -460,14 +467,16 @@ describe('AuthService', () => {
         const token = 'already-invalidated-token';
         const decoded = { userId: 1 };
 
+        // Mock jwt.verify since logout now validates token before processing
         jest.spyOn(jwt, 'verify').mockImplementation(() => decoded);
 
-        // Act - call logout twice
+        // Act - call logout twice (first one succeeds, second returns session not found)
         await service.logout(token);
         const result = await service.logout(token);
 
-        // Assert - should still return success
-        expect(result.success).toBe(true);
+        // Assert - second logout should fail since session was already removed
+        expect(result.success).toBe(false);
+        expect(result.message).toBe('Session not found');
       });
 
       it('should handle logout with whitespace token', async () => {
@@ -479,7 +488,7 @@ describe('AuthService', () => {
 
         // Assert
         expect(result.success).toBe(false);
-        expect(result.message).toBe('Token is required');
+        expect(result.message).toBe('Invalid or missing token');
       });
     });
   });
