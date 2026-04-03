@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { SavingsAccount } from '../db/models/SavingsAccount';
-import { transaction } from 'sequelize';
+import { SavingsAccount } from '../../db/models/SavingsAccount';
 
 export interface SavingsAccountInterface {
   id: number;
@@ -42,10 +41,8 @@ export class SavingsAccountService implements SavingsAccountServiceInterface {
    * Time complexity: O(1)
    */
   private generateAccountNumber(): string {
-    const timestamp = Date.now().toString(36).toUpperCase();
-    const sequence = String(++this.accountCounter).padStart(4, '0');
-    const random = Math.random().toString(36).substr(2, 4).toUpperCase();
-    return `SAV-${timestamp}${sequence}${random}`.substr(0, 16);
+    const sequence = String(++this.accountCounter).padStart(8, '0');
+    return `SAV-${sequence}`;
   }
 
   /**
