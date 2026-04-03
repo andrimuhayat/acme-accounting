@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getModelToken } from '@nestjs/sequelize';
 import { SavingsAccountService, SavingsAccountServiceInterface } from './savings-account.service';
-import { SavingsAccount } from '../db/models/SavingsAccount';
+import { SavingsAccount } from '../../db/models/SavingsAccount';
 
 /**
  * Mock SavingsAccount model for testing
@@ -38,7 +39,7 @@ describe('SavingsAccountService', () => {
       providers: [
         SavingsAccountService,
         {
-          provide: SavingsAccount,
+          provide: getModelToken(SavingsAccount),
           useValue: mockSavingsAccountModel,
         },
       ],
