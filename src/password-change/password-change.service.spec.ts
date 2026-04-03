@@ -4,9 +4,6 @@ import { PasswordChangeService, ChangePasswordResponse } from './password-change
 describe('PasswordChangeService', () => {
   let service: PasswordChangeService;
 
-  // Mock user database for testing
-  const mockUsers = new Map<number, { password: string }>();
-
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [PasswordChangeService],

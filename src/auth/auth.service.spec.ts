@@ -423,8 +423,11 @@ describe('AuthService', () => {
       it('should reject logout when session not found', async () => {
         // Arrange - token that was never logged in with
         const token = 'non-existent-session-token';
+        const decoded = { userId: 1, email: 'test@example.com' };
 
-        // Note: logout() does NOT call jwt.verify - it only checks activeSessions Map
+        // Mock jwt.verify since logout() validates token before checking session
+        jest.spyOn(jwt, 'verify').mockImplementation(() => decoded);
+
         // Act - logout without ever establishing this session
         const result = await service.logout(token);
 
@@ -795,10 +798,12 @@ describe('AuthService', () => {
       // Arrange
       const email = 'test@example.com';
       const password = 'password123';
-      const decoded = { userId: 1 };
+      const decoded = { userId: 1, email: 'test@example.com' };
 
       jest.spyOn(bcrypt, 'compare').mockImplementation(() => Promise.resolve(true));
       jest.spyOn(jwt, 'sign').mockImplementation(() => 'flow-token');
+      // Mock jwt.verify for both validateToken and logout
+      jest.spyOn(jwt, 'verify').mockImplementation(() => decoded);
 
       // Act - Login
       const loginResult = await service.login(email, password);
@@ -821,12 +826,15 @@ describe('AuthService', () => {
       // Arrange
       const user1 = { email: 'user1@example.com', password: 'password1', id: 1 };
       const user2 = { email: 'user2@example.com', password: 'password2', id: 2 };
+      const decoded = { userId: 1, email: 'user1@example.com' };
 
       jest.spyOn(bcrypt, 'compare')
         .mockImplementation((pwd: string) => Promise.resolve(pwd === user1.password || pwd === user2.password));
       jest.spyOn(jwt, 'sign')
         .mockImplementationOnce(() => 'user1-token')
         .mockImplementationOnce(() => 'user2-token');
+      // Mock jwt.verify for validateToken calls
+      jest.spyOn(jwt, 'verify').mockImplementation(() => decoded);
 
       // Act
       const login1 = await service.login(user1.email, user1.password);
