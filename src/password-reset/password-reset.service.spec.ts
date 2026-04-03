@@ -152,7 +152,8 @@ describe('PasswordResetService', () => {
         const userId = 1;
         const email = 'user@example.com';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
 
         // Act
         const isValid = await service.validateResetToken(token);
@@ -212,7 +213,8 @@ describe('PasswordResetService', () => {
         const userId = 1;
         const email = 'user@example.com';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
 
         // Mark token as used
         await service.resetPassword(token, 'newPassword123');
@@ -229,7 +231,8 @@ describe('PasswordResetService', () => {
         const userId = 1;
         const email = 'user@example.com';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
 
         // Manually move time forward by manipulating the token (simulate expiry)
         // We'll wait for token to expire in real time or test with a mock
@@ -247,7 +250,8 @@ describe('PasswordResetService', () => {
         const email = 'user@example.com';
         const newPassword = 'newSecurePassword123';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
 
         // Act
         const result = await service.resetPassword(token, newPassword);
@@ -263,7 +267,8 @@ describe('PasswordResetService', () => {
         const email = 'user@example.com';
         const newPassword = 'newSecurePassword123';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
 
         // Act
         await service.resetPassword(token, newPassword);
@@ -279,7 +284,8 @@ describe('PasswordResetService', () => {
         const email = 'user@example.com';
         const newPassword = 'newSecurePassword123';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
 
         // Act
         await service.resetPassword(token, newPassword);
@@ -310,7 +316,8 @@ describe('PasswordResetService', () => {
         const userId = 1;
         const email = 'user@example.com';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
         const newPassword = '';
 
         // Act
@@ -326,7 +333,8 @@ describe('PasswordResetService', () => {
         const userId = 1;
         const email = 'user@example.com';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
         const newPassword = null;
 
         // Act
@@ -354,7 +362,8 @@ describe('PasswordResetService', () => {
         const userId = 1;
         const email = 'user@example.com';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
         const newPassword = '   ';
 
         // Act
@@ -400,7 +409,8 @@ describe('PasswordResetService', () => {
         const userId = 1;
         const email = 'user@example.com';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
         await service.resetPassword(token, 'newPassword');
 
         // Act
@@ -469,7 +479,8 @@ describe('PasswordResetService', () => {
         const userId = 1;
         const email = 'user@example.com';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
         await service.resetPassword(token, 'newPassword');
 
         // Act
@@ -583,7 +594,8 @@ describe('PasswordResetService', () => {
         const userId = 1;
         const email = 'user@example.com';
         const genResult = await service.generateResetToken(userId, email);
-        const token = genResult.tokenId;
+        expect(genResult.tokenId).toBeDefined();
+        const token = genResult.tokenId!;
         await service.resetPassword(token, 'newPassword');
 
         // Act
@@ -621,17 +633,19 @@ describe('PasswordResetService', () => {
       // Act - Step 1: Generate token
       const genResult = await service.generateResetToken(userId, email);
       expect(genResult.success).toBe(true);
+      expect(genResult.tokenId).toBeDefined();
+      const token = genResult.tokenId!;
 
       // Step 2: Validate token
-      const isValid = await service.validateResetToken(genResult.tokenId);
+      const isValid = await service.validateResetToken(token);
       expect(isValid).toBe(true);
 
       // Step 3: Reset password
-      const resetResult = await service.resetPassword(genResult.tokenId, newPassword);
+      const resetResult = await service.resetPassword(token, newPassword);
       expect(resetResult.success).toBe(true);
 
       // Step 4: Verify token is no longer valid
-      const isValidAfter = await service.validateResetToken(genResult.tokenId);
+      const isValidAfter = await service.validateResetToken(token);
       expect(isValidAfter).toBe(false);
 
       // Assert
