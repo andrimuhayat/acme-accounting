@@ -433,6 +433,196 @@ describe('SavingAccountService', () => {
   });
 
   // ============================================
+  // getAccountReport Tests
+  // ============================================
+
+  describe('getAccountReport', () => {
+    it('should return complete report structure for account with transactions', async () => {
+      const account = await service.createAccount('Test Report', 100);
+      await service.deposit(account.id, 50, 'Deposit 1');
+      await service.withdraw(account.id, 30, 'Withdraw 1');
+
+      const report = await service.getAccountReport(account.id);
+
+      // Verify top-level structure
+      expect(report).toBeDefined();
+      expect(report.accountId).toBe(account.id);
+      expect(report.accountNumber).toBe(account.accountNumber);
+      expect(report.accountName).toBe('Test Report');
+      expect(report.balance).toBe(120); // 100 + 50 - 30
+      expect(report.currency).toBe('USD');
+      expect(report.createdAt).toBeInstanceOf(Date);
+      expect(report.updatedAt).toBeInstanceOf(Date);
+
+      // Verify transaction summary structure
+      expect(report.transactionSummary).toBeDefined();
+      expect(report.transactionSummary.totalDeposits).toBe(150); // 100 + 50 (initial + deposit)
+      expect(report.transactionSummary.totalWithdrawals).toBe(30);
+      expect(report.transactionSummary.transactionCount).toBe(2);
+
+      // Verify recent transactions structure
+      expect(report.recentTransactions).toBeDefined();
+      expect(Array.isArray(report.recentTransactions)).toBe(true);
+    });
+
+    it('should return zero transaction summary for empty account', async () => {
+      const account = await service.createAccount('Empty Report');
+
+      const report = await service.getAccountReport(account.id);
+
+      expect(report.accountId).toBe(account.id);
+      expect(report.balance).toBe(0);
+      expect(report.transactionSummary.totalDeposits).toBe(0);
+      expect(report.transactionSummary.totalWithdrawals).toBe(0);
+      expect(report.transactionSummary.transactionCount).toBe(0);
+      expect(report.recentTransactions).toEqual([]);
+    });
+
+    it('should correctly aggregate deposits only', async () => {
+      const account = await service.createAccount('Deposits Only', 100);
+      await service.deposit(account.id, 50, 'Deposit 1');
+      await service.deposit(account.id, 75, 'Deposit 2');
+
+      const report = await service.getAccountReport(account.id);
+
+      expect(report.transactionSummary.totalDeposits).toBe(225); // 100 + 50 + 75
+      expect(report.transactionSummary.totalWithdrawals).toBe(0);
+      expect(report.transactionSummary.transactionCount).toBe(2);
+      expect(report.balance).toBe(225);
+    });
+
+    it('should correctly aggregate withdrawals only', async () => {
+      const account = await service.createAccount('Withdrawals Only', 200);
+      await service.withdraw(account.id, 50, 'Withdraw 1');
+      await service.withdraw(account.id, 75, 'Withdraw 2');
+
+      const report = await service.getAccountReport(account.id);
+
+      expect(report.transactionSummary.totalDeposits).toBe(200); // Initial deposit
+      expect(report.transactionSummary.totalWithdrawals).toBe(125); // 50 + 75
+      expect(report.transactionSummary.transactionCount).toBe(2);
+      expect(report.balance).toBe(75); // 200 - 50 - 75
+    });
+
+    it('should correctly aggregate mixed transactions', async () => {
+      const account = await service.createAccount('Mixed Transactions', 100);
+      await service.deposit(account.id, 100, 'Deposit 1');
+      await service.withdraw(account.id, 50, 'Withdraw 1');
+      await service.deposit(account.id, 75, 'Deposit 2');
+      await service.withdraw(account.id, 25, 'Withdraw 2');
+
+      const report = await service.getAccountReport(account.id);
+
+      expect(report.transactionSummary.totalDeposits).toBe(275); // 100 + 100 + 75
+      expect(report.transactionSummary.totalWithdrawals).toBe(75); // 50 + 25
+      expect(report.transactionSummary.transactionCount).toBe(4);
+      expect(report.balance).toBe(200); // 100 + 100 - 50 + 75 - 25
+    });
+
+    it('should return only last 10 recent transactions', async () => {
+      const account = await service.createAccount('Many Transactions', 0);
+      // Create 15 transactions
+      for (let i = 1; i <= 15; i++) {
+        await service.deposit(account.id, i * 10, `Transaction ${i}`);
+      }
+
+      const report = await service.getAccountReport(account.id);
+
+      expect(report.recentTransactions.length).toBe(10);
+      // Most recent should be Transaction 15 (highest amount)
+      expect(report.recentTransactions[0].description).toBe('Transaction 15');
+      // Oldest of the recent 10 should be Transaction 6
+      expect(report.recentTransactions[9].description).toBe('Transaction 6');
+    });
+
+    it('should return transactions in descending order by date', async () => {
+      const account = await service.createAccount('Ordered Report', 100);
+      await service.deposit(account.id, 10, 'First');
+      await service.deposit(account.id, 20, 'Second');
+      await service.deposit(account.id, 30, 'Third');
+
+      const report = await service.getAccountReport(account.id);
+
+      expect(report.recentTransactions[0].description).toBe('Third');
+      expect(report.recentTransactions[1].description).toBe('Second');
+      expect(report.recentTransactions[2].description).toBe('First');
+    });
+
+    it('should include initial deposit in transaction summary', async () => {
+      const account = await service.createAccount('With Initial', 500);
+
+      const report = await service.getAccountReport(account.id);
+
+      expect(report.transactionSummary.totalDeposits).toBe(500);
+      expect(report.transactionSummary.totalWithdrawals).toBe(0);
+      expect(report.transactionSummary.transactionCount).toBe(0); // No actual transactions yet
+      expect(report.recentTransactions.length).toBe(0);
+    });
+
+    it('should include correct transaction details in recentTransactions', async () => {
+      const account = await service.createAccount('Detailed Report', 100);
+      const depositTxn = await service.deposit(account.id, 50, 'Detailed deposit');
+      const withdrawTxn = await service.withdraw(account.id, 25, 'Detailed withdrawal');
+
+      const report = await service.getAccountReport(account.id);
+
+      // Find the deposit transaction in recentTransactions
+      const depositInReport = report.recentTransactions.find(
+        (t) => t.id === depositTxn.id,
+      );
+      expect(depositInReport).toBeDefined();
+      expect(depositInReport?.type).toBe('deposit');
+      expect(depositInReport?.amount).toBe(50);
+      expect(depositInReport?.balanceAfter).toBe(150);
+      expect(depositInReport?.description).toBe('Detailed deposit');
+
+      // Find the withdrawal transaction in recentTransactions
+      const withdrawInReport = report.recentTransactions.find(
+        (t) => t.id === withdrawTxn.id,
+      );
+      expect(withdrawInReport).toBeDefined();
+      expect(withdrawInReport?.type).toBe('withdrawal');
+      expect(withdrawInReport?.amount).toBe(25);
+      expect(withdrawInReport?.balanceAfter).toBe(125);
+      expect(withdrawInReport?.description).toBe('Detailed withdrawal');
+    });
+
+    it('should throw error for non-existent account', async () => {
+      await expect(service.getAccountReport('non-existent-id')).rejects.toThrow(
+        'Account not found',
+      );
+    });
+
+    it('should throw error for empty account ID', async () => {
+      await expect(service.getAccountReport('')).rejects.toThrow(
+        'Account ID is required',
+      );
+    });
+
+    it('should handle decimal amounts correctly in summary', async () => {
+      const account = await service.createAccount('Decimal Report', 100.5);
+      await service.deposit(account.id, 50.25, 'Decimal deposit');
+      await service.withdraw(account.id, 25.75, 'Decimal withdrawal');
+
+      const report = await service.getAccountReport(account.id);
+
+      expect(report.balance).toBe(125); // 100.5 + 50.25 - 25.75 = 125
+      expect(report.transactionSummary.totalDeposits).toBe(150.75); // 100.5 + 50.25
+      expect(report.transactionSummary.totalWithdrawals).toBe(25.75);
+    });
+
+    it('should handle large transaction amounts', async () => {
+      const account = await service.createAccount('Large Amounts', 0);
+      await service.deposit(account.id, 999999999.99, 'Huge deposit');
+
+      const report = await service.getAccountReport(account.id);
+
+      expect(report.balance).toBe(999999999.99);
+      expect(report.transactionSummary.totalDeposits).toBe(999999999.99);
+    });
+  });
+
+  // ============================================
   // Integration Tests
   // ============================================
 
@@ -501,6 +691,61 @@ describe('SavingAccountService', () => {
       expect(account1.accountNumber).not.toBe(account2.accountNumber);
       expect(account2.accountNumber).not.toBe(account3.accountNumber);
       expect(account1.accountNumber).not.toBe(account3.accountNumber);
+    });
+
+    it('should generate correct report through complete account lifecycle', async () => {
+      // Create account with initial deposit
+      const account = await service.createAccount('Report Lifecycle', 1000);
+      expect(account.balance).toBe(1000);
+
+      // Make several transactions
+      await service.deposit(account.id, 500, 'First deposit');
+      await service.withdraw(account.id, 200, 'First withdrawal');
+      await service.deposit(account.id, 300, 'Second deposit');
+
+      // Get the account report
+      const report = await service.getAccountReport(account.id);
+
+      // Verify report reflects complete lifecycle
+      expect(report.accountId).toBe(account.id);
+      expect(report.accountName).toBe('Report Lifecycle');
+      expect(report.balance).toBe(1600); // 1000 + 500 - 200 + 300
+      expect(report.transactionSummary.totalDeposits).toBe(1800); // 1000 + 500 + 300
+      expect(report.transactionSummary.totalWithdrawals).toBe(200);
+      expect(report.transactionSummary.transactionCount).toBe(3);
+      expect(report.recentTransactions.length).toBe(3);
+    });
+
+    it('should track financial summary correctly through complex transactions', async () => {
+      const account = await service.createAccount('Financial Summary', 100);
+
+      const transactionPlan = [
+        { type: 'deposit', amount: 50 },
+        { type: 'withdrawal', amount: 30 },
+        { type: 'deposit', amount: 100 },
+        { type: 'withdrawal', amount: 80 },
+        { type: 'deposit', amount: 25 },
+      ];
+
+      let expectedDeposits = 100; // Initial
+      let expectedWithdrawals = 0;
+
+      for (const txn of transactionPlan) {
+        if (txn.type === 'deposit') {
+          await service.deposit(account.id, txn.amount);
+          expectedDeposits += txn.amount;
+        } else {
+          await service.withdraw(account.id, txn.amount);
+          expectedWithdrawals += txn.amount;
+        }
+      }
+
+      const report = await service.getAccountReport(account.id);
+
+      expect(report.transactionSummary.totalDeposits).toBe(expectedDeposits);
+      expect(report.transactionSummary.totalWithdrawals).toBe(expectedWithdrawals);
+      expect(report.transactionSummary.transactionCount).toBe(5);
+      expect(report.balance).toBe(expectedDeposits - expectedWithdrawals);
     });
   });
 });

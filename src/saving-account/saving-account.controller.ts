@@ -64,6 +64,24 @@ export interface TransactionsResponse {
   count: number;
 }
 
+export interface TransactionSummary {
+  totalDeposits: number;
+  totalWithdrawals: number;
+  transactionCount: number;
+}
+
+export interface AccountReportResponse {
+  accountId: string;
+  accountNumber: string;
+  accountName: string;
+  balance: number;
+  currency: string;
+  transactionSummary: TransactionSummary;
+  recentTransactions: TransactionResponse[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 /**
  * Saving Account Controller
  * 
@@ -179,6 +197,40 @@ export class SavingAccountController {
       }
       throw new BadRequestException(
         error instanceof Error ? error.message : 'Failed to get transactions',
+      );
+    }
+  }
+
+  /**
+   * Get account report with transaction summary
+   * GET /api/v1/saving-account/:accountId/report
+   * 
+   * @param accountId - The unique account identifier
+   * @returns Account report with transaction summary and recent transactions
+   */
+  @Get(':accountId/report')
+  async getAccountReport(
+    @Param('accountId') accountId: string,
+  ): Promise<AccountReportResponse> {
+    try {
+      const report = await this.savingAccountService.getAccountReport(accountId);
+      return {
+        accountId: report.accountId,
+        accountNumber: report.accountNumber,
+        accountName: report.accountName,
+        balance: report.balance,
+        currency: report.currency,
+        transactionSummary: report.transactionSummary,
+        recentTransactions: report.recentTransactions.map((txn) => this.toTransactionResponse(txn)),
+        createdAt: report.createdAt,
+        updatedAt: report.updatedAt,
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Account not found') {
+        throw new NotFoundException(`Account with ID ${accountId} not found`);
+      }
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Failed to get account report',
       );
     }
   }
