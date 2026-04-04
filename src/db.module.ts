@@ -7,6 +7,8 @@ import { User } from '../db/models/User';
 import { SavingAccount } from '../db/models/SavingAccount';
 import { SavingsAccount } from '../db/models/SavingsAccount';
 import { Transaction } from '../db/models/Transaction';
+import { AuthUser } from '../db/models/AuthUser';
+import { Task } from '../db/models/Task';
 import dbConfig from '../db/config/config.json';
 
 const devConfig = dbConfig.development as SequelizeModuleOptions;
@@ -18,7 +20,7 @@ const config = process.env.NODE_ENV === 'test' ? testConfig : devConfig;
   imports: [
     SequelizeModule.forRoot({
       ...config,
-      models: [Company, User, Ticket, SavingAccount, SavingsAccount, Transaction],
+      models: [Company, User, Ticket, SavingAccount, SavingsAccount, Transaction, AuthUser, Task],
     }),
   ],
 })
