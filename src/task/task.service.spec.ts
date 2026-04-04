@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getModelToken } from '@nestjs/sequelize';
-import { TaskService, CreateTaskResponse, UpdateTaskResponse, DeleteTaskResponse } from './task.service';
-import { Task, TaskStatus } from '../db/models/Task';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { TaskService, CreateTaskDto, UpdateTaskDto, TaskResponse } from './task.service';
+import { Task, TaskStatus } from '../../db/models/Task';
+
+// Mock the Task model
+jest.mock('../../db/models/Task');
 
 describe('TaskService', () => {
   let service: TaskService;
@@ -15,229 +18,92 @@ describe('TaskService', () => {
     userId: 1,
     createdAt: new Date(),
     updatedAt: new Date(),
-  };
-
-  // Mock the Task model
-  const mockTaskRepository = {
-    create: jest.fn(),
-    findAll: jest.fn(),
-    findByPk: jest.fn(),
-    findOne: jest.fn(),
-    update: jest.fn(),
+    save: jest.fn(),
     destroy: jest.fn(),
   };
 
   beforeEach(async () => {
+    // Clear all mocks before each test
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        TaskService,
-        {
-          provide: getModelToken(Task),
-          useValue: mockTaskRepository,
-        },
-      ],
+      providers: [TaskService],
     }).compile();
 
     service = module.get<TaskService>(TaskService);
-
-    // Reset all mocks before each test
-    jest.clearAllMocks();
   });
 
   describe('createTask', () => {
     describe('happy path', () => {
       it('should successfully create a task', async () => {
         // Arrange
-        const title = 'New Task';
-        const description = 'Task description';
         const userId = 1;
+        const dto: CreateTaskDto = { title: 'New Task', description: 'Task description' };
 
-        mockTaskRepository.create.mockResolvedValue({
+        (Task.create as jest.Mock).mockResolvedValue({
           id: 1,
-          title,
-          description,
+          title: dto.title,
+          description: dto.description,
           status: TaskStatus.pending,
           userId,
+          createdAt: new Date(),
         });
 
         // Act
-        const result: CreateTaskResponse = await service.createTask(title, description, userId);
+        const result: TaskResponse = await service.createTask(userId, dto);
 
         // Assert
-        expect(result.success).toBe(true);
-        expect(result.task).toBeDefined();
-        expect(result.task.title).toBe(title);
-        expect(result.task.description).toBe(description);
-        expect(result.task.status).toBe(TaskStatus.pending);
-        expect(result.task.userId).toBe(userId);
+        expect(result.id).toBe(1);
+        expect(result.title).toBe(dto.title);
+        expect(result.description).toBe(dto.description);
+        expect(result.status).toBe(TaskStatus.pending);
+        expect(result.userId).toBe(userId);
+        expect(Task.create).toHaveBeenCalledWith({
+          title: dto.title,
+          description: dto.description || '',
+          status: TaskStatus.pending,
+          userId,
+        });
       });
 
-      it('should create task with default pending status', async () => {
+      it('should create task with empty description when not provided', async () => {
         // Arrange
-        const title = 'Task without description';
         const userId = 1;
+        const dto: CreateTaskDto = { title: 'Task without description' };
 
-        mockTaskRepository.create.mockResolvedValue({
+        (Task.create as jest.Mock).mockResolvedValue({
           id: 2,
-          title,
+          title: dto.title,
           description: '',
           status: TaskStatus.pending,
           userId,
+          createdAt: new Date(),
         });
 
         // Act
-        const result: CreateTaskResponse = await service.createTask(title, undefined, userId);
+        const result: TaskResponse = await service.createTask(userId, dto);
 
         // Assert
-        expect(result.success).toBe(true);
-        expect(result.task.status).toBe(TaskStatus.pending);
-      });
-
-      it('should return task with id', async () => {
-        // Arrange
-        const title = 'Task with ID';
-        const userId = 1;
-
-        mockTaskRepository.create.mockResolvedValue({
-          id: 5,
-          title,
-          status: TaskStatus.pending,
-          userId,
-        });
-
-        // Act
-        const result: CreateTaskResponse = await service.createTask(title, '', userId);
-
-        // Assert
-        expect(result.task.id).toBeDefined();
-        expect(typeof result.task.id).toBe('number');
-      });
-    });
-
-    describe('error cases', () => {
-      it('should reject task with empty title', async () => {
-        // Arrange
-        const title = '';
-        const userId = 1;
-
-        // Act
-        const result: CreateTaskResponse = await service.createTask(title, 'desc', userId);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('Title is required');
-      });
-
-      it('should reject task with null title', async () => {
-        // Act
-        const result: CreateTaskResponse = await service.createTask(null as any, 'desc', 1);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('Title is required');
-      });
-
-      it('should reject task with whitespace-only title', async () => {
-        // Arrange
-        const title = '   ';
-        const userId = 1;
-
-        // Act
-        const result: CreateTaskResponse = await service.createTask(title, 'desc', userId);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('Title is required');
-      });
-
-      it('should reject task creation when userId is invalid', async () => {
-        // Act
-        const result: CreateTaskResponse = await service.createTask('Title', 'desc', null as any);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('User ID is required');
-      });
-    });
-  });
-
-  describe('getTasksByUser', () => {
-    describe('happy path', () => {
-      it('should return all tasks for a user', async () => {
-        // Arrange
-        const userId = 1;
-        const tasks = [
-          { id: 1, title: 'Task 1', userId },
-          { id: 2, title: 'Task 2', userId },
-        ];
-        mockTaskRepository.findAll.mockResolvedValue(tasks);
-
-        // Act
-        const result = await service.getTasksByUser(userId);
-
-        // Assert
-        expect(result).toEqual(tasks);
-        expect(mockTaskRepository.findAll).toHaveBeenCalledWith({
-          where: { userId },
-        });
-      });
-
-      it('should return empty array when user has no tasks', async () => {
-        // Arrange
-        const userId = 999;
-        mockTaskRepository.findAll.mockResolvedValue([]);
-
-        // Act
-        const result = await service.getTasksByUser(userId);
-
-        // Assert
-        expect(result).toEqual([]);
-      });
-    });
-
-    describe('error cases', () => {
-      it('should reject when userId is invalid', async () => {
-        // Act
-        const result = await service.getTasksByUser(null as any);
-
-        // Assert
-        expect(result).toEqual({ success: false, message: 'User ID is required' });
-      });
-
-      it('should reject when userId is zero', async () => {
-        // Act
-        const result = await service.getTasksByUser(0);
-
-        // Assert
-        expect(result).toEqual({ success: false, message: 'User ID is required' });
-      });
-    });
-  });
-
-  describe('getTaskById', () => {
-    describe('happy path', () => {
-      it('should return task when found and user owns it', async () => {
-        // Arrange
-        const taskId = 1;
-        const userId = 1;
-        const task = { ...mockTask, userId };
-        mockTaskRepository.findByPk.mockResolvedValue(task);
-
-        // Act
-        const result = await service.getTaskById(taskId, userId);
-
-        // Assert
-        expect(result).toEqual(task);
+        expect(result.description).toBe('');
+        expect(result.status).toBe(TaskStatus.pending);
       });
 
       it('should return task with correct structure', async () => {
         // Arrange
-        const taskId = 1;
         const userId = 1;
-        mockTaskRepository.findByPk.mockResolvedValue(mockTask);
+        const dto: CreateTaskDto = { title: 'Task with ID' };
+
+        (Task.create as jest.Mock).mockResolvedValue({
+          id: 5,
+          title: dto.title,
+          description: '',
+          status: TaskStatus.pending,
+          userId,
+          createdAt: new Date(),
+        });
 
         // Act
-        const result = await service.getTaskById(taskId, userId);
+        const result: TaskResponse = await service.createTask(userId, dto);
 
         // Assert
         expect(result).toHaveProperty('id');
@@ -250,47 +116,143 @@ describe('TaskService', () => {
     });
 
     describe('error cases', () => {
-      it('should return error when task not found', async () => {
+      it('should reject task with empty title', async () => {
+        // Arrange
+        const userId = 1;
+        const dto: CreateTaskDto = { title: '' };
+
+        // Act & Assert
+        await expect(service.createTask(userId, dto)).rejects.toThrow(ForbiddenException);
+      });
+
+      it('should reject task with whitespace-only title', async () => {
+        // Arrange
+        const userId = 1;
+        const dto: CreateTaskDto = { title: '   ' };
+
+        // Act & Assert
+        await expect(service.createTask(userId, dto)).rejects.toThrow(ForbiddenException);
+      });
+
+      it('should reject task when title is null', async () => {
+        // Arrange
+        const userId = 1;
+        const dto = { title: null as any, description: 'desc' };
+
+        // Act & Assert
+        await expect(service.createTask(userId, dto)).rejects.toThrow();
+      });
+    });
+  });
+
+  describe('getTasksByUser', () => {
+    describe('happy path', () => {
+      it('should return all tasks for a user', async () => {
+        // Arrange
+        const userId = 1;
+        const tasks = [
+          { id: 1, title: 'Task 1', description: '', status: TaskStatus.pending, userId, createdAt: new Date() },
+          { id: 2, title: 'Task 2', description: '', status: TaskStatus.in_progress, userId, createdAt: new Date() },
+        ];
+        (Task.findAll as jest.Mock).mockResolvedValue(tasks);
+
+        // Act
+        const result: TaskResponse[] = await service.getTasksByUser(userId);
+
+        // Assert
+        expect(result).toHaveLength(2);
+        expect(Task.findAll).toHaveBeenCalledWith({
+          where: { userId },
+          order: [['createdAt', 'DESC']],
+        });
+      });
+
+      it('should return empty array when user has no tasks', async () => {
+        // Arrange
+        const userId = 999;
+        (Task.findAll as jest.Mock).mockResolvedValue([]);
+
+        // Act
+        const result: TaskResponse[] = await service.getTasksByUser(userId);
+
+        // Assert
+        expect(result).toEqual([]);
+      });
+
+      it('should return tasks with correct structure', async () => {
+        // Arrange
+        const userId = 1;
+        (Task.findAll as jest.Mock).mockResolvedValue([mockTask]);
+
+        // Act
+        const result: TaskResponse[] = await service.getTasksByUser(userId);
+
+        // Assert
+        expect(result[0]).toHaveProperty('id');
+        expect(result[0]).toHaveProperty('title');
+        expect(result[0]).toHaveProperty('description');
+        expect(result[0]).toHaveProperty('status');
+        expect(result[0]).toHaveProperty('userId');
+        expect(result[0]).toHaveProperty('createdAt');
+      });
+    });
+  });
+
+  describe('getTaskById', () => {
+    describe('happy path', () => {
+      it('should return task when found and user owns it', async () => {
+        // Arrange
+        const taskId = 1;
+        const userId = 1;
+        (Task.findByPk as jest.Mock).mockResolvedValue({ ...mockTask });
+
+        // Act
+        const result: TaskResponse = await service.getTaskById(taskId, userId);
+
+        // Assert
+        expect(result.id).toBe(taskId);
+        expect(result.userId).toBe(userId);
+      });
+
+      it('should return task with correct structure', async () => {
+        // Arrange
+        const taskId = 1;
+        const userId = 1;
+        (Task.findByPk as jest.Mock).mockResolvedValue({ ...mockTask });
+
+        // Act
+        const result: TaskResponse = await service.getTaskById(taskId, userId);
+
+        // Assert
+        expect(result).toHaveProperty('id');
+        expect(result).toHaveProperty('title');
+        expect(result).toHaveProperty('description');
+        expect(result).toHaveProperty('status');
+        expect(result).toHaveProperty('userId');
+        expect(result).toHaveProperty('createdAt');
+      });
+    });
+
+    describe('error cases', () => {
+      it('should throw NotFoundException when task not found', async () => {
         // Arrange
         const taskId = 999;
         const userId = 1;
-        mockTaskRepository.findByPk.mockResolvedValue(null);
+        (Task.findByPk as jest.Mock).mockResolvedValue(null);
 
-        // Act
-        const result = await service.getTaskById(taskId, userId);
-
-        // Assert
-        expect(result).toEqual({ success: false, message: 'Task not found' });
+        // Act & Assert
+        await expect(service.getTaskById(taskId, userId)).rejects.toThrow(NotFoundException);
       });
 
-      it('should return error when task belongs to different user', async () => {
+      it('should throw ForbiddenException when task belongs to different user', async () => {
         // Arrange
         const taskId = 1;
         const taskOwnerId = 2;
         const requestingUserId = 1;
-        mockTaskRepository.findByPk.mockResolvedValue({ ...mockTask, userId: taskOwnerId });
+        (Task.findByPk as jest.Mock).mockResolvedValue({ ...mockTask, userId: taskOwnerId });
 
-        // Act
-        const result = await service.getTaskById(taskId, requestingUserId);
-
-        // Assert
-        expect(result).toEqual({ success: false, message: 'Task not found' });
-      });
-
-      it('should return error when taskId is invalid', async () => {
-        // Act
-        const result = await service.getTaskById(null as any, 1);
-
-        // Assert
-        expect(result).toEqual({ success: false, message: 'Task ID is required' });
-      });
-
-      it('should return error when userId is invalid', async () => {
-        // Act
-        const result = await service.getTaskById(1, null as any);
-
-        // Assert
-        expect(result).toEqual({ success: false, message: 'User ID is required' });
+        // Act & Assert
+        await expect(service.getTaskById(taskId, requestingUserId)).rejects.toThrow(ForbiddenException);
       });
     });
   });
@@ -301,130 +263,116 @@ describe('TaskService', () => {
         // Arrange
         const taskId = 1;
         const userId = 1;
-        const newTitle = 'Updated Title';
-        mockTaskRepository.findByPk.mockResolvedValue({ ...mockTask, userId });
-        mockTaskRepository.update.mockResolvedValue([1]);
+        const dto: UpdateTaskDto = { title: 'Updated Title' };
+        const mockTaskInstance = {
+          ...mockTask,
+          save: jest.fn().mockResolvedValue(true),
+        };
+        (Task.findByPk as jest.Mock).mockResolvedValue(mockTaskInstance);
 
         // Act
-        const result: UpdateTaskResponse = await service.updateTask(taskId, userId, newTitle, undefined, undefined);
+        const result: TaskResponse = await service.updateTask(taskId, userId, dto);
 
         // Assert
-        expect(result.success).toBe(true);
-        expect(result.task).toBeDefined();
-        expect(mockTaskRepository.update).toHaveBeenCalled();
+        expect(mockTaskInstance.save).toHaveBeenCalled();
       });
 
       it('should successfully update task description', async () => {
         // Arrange
         const taskId = 1;
         const userId = 1;
-        const newDescription = 'Updated Description';
-        mockTaskRepository.findByPk.mockResolvedValue({ ...mockTask, userId });
-        mockTaskRepository.update.mockResolvedValue([1]);
+        const dto: UpdateTaskDto = { description: 'Updated Description' };
+        const mockTaskInstance = {
+          ...mockTask,
+          save: jest.fn().mockResolvedValue(true),
+        };
+        (Task.findByPk as jest.Mock).mockResolvedValue(mockTaskInstance);
 
         // Act
-        const result: UpdateTaskResponse = await service.updateTask(taskId, userId, undefined, newDescription, undefined);
+        await service.updateTask(taskId, userId, dto);
 
         // Assert
-        expect(result.success).toBe(true);
+        expect(mockTaskInstance.save).toHaveBeenCalled();
       });
 
       it('should successfully update task status', async () => {
         // Arrange
         const taskId = 1;
         const userId = 1;
-        const newStatus = TaskStatus.completed;
-        mockTaskRepository.findByPk.mockResolvedValue({ ...mockTask, userId });
-        mockTaskRepository.update.mockResolvedValue([1]);
+        const dto: UpdateTaskDto = { status: TaskStatus.completed };
+        const mockTaskInstance = {
+          ...mockTask,
+          save: jest.fn().mockResolvedValue(true),
+        };
+        (Task.findByPk as jest.Mock).mockResolvedValue(mockTaskInstance);
 
         // Act
-        const result: UpdateTaskResponse = await service.updateTask(taskId, userId, undefined, undefined, newStatus);
+        await service.updateTask(taskId, userId, dto);
 
         // Assert
-        expect(result.success).toBe(true);
+        expect(mockTaskInstance.save).toHaveBeenCalled();
       });
 
       it('should update multiple fields at once', async () => {
         // Arrange
         const taskId = 1;
         const userId = 1;
-        mockTaskRepository.findByPk.mockResolvedValue({ ...mockTask, userId });
-        mockTaskRepository.update.mockResolvedValue([1]);
+        const dto: UpdateTaskDto = {
+          title: 'New Title',
+          description: 'New Description',
+          status: TaskStatus.in_progress,
+        };
+        const mockTaskInstance = {
+          ...mockTask,
+          save: jest.fn().mockResolvedValue(true),
+        };
+        (Task.findByPk as jest.Mock).mockResolvedValue(mockTaskInstance);
 
         // Act
-        const result: UpdateTaskResponse = await service.updateTask(
-          taskId,
-          userId,
-          'New Title',
-          'New Description',
-          TaskStatus.in_progress,
-        );
+        await service.updateTask(taskId, userId, dto);
 
         // Assert
-        expect(result.success).toBe(true);
+        expect(mockTaskInstance.save).toHaveBeenCalled();
       });
     });
 
     describe('error cases', () => {
-      it('should return error when task not found', async () => {
+      it('should throw NotFoundException when task not found', async () => {
         // Arrange
         const taskId = 999;
         const userId = 1;
-        mockTaskRepository.findByPk.mockResolvedValue(null);
+        const dto: UpdateTaskDto = { title: 'Title' };
+        (Task.findByPk as jest.Mock).mockResolvedValue(null);
 
-        // Act
-        const result: UpdateTaskResponse = await service.updateTask(taskId, userId, 'Title', undefined, undefined);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('Task not found');
+        // Act & Assert
+        await expect(service.updateTask(taskId, userId, dto)).rejects.toThrow(NotFoundException);
       });
 
-      it('should return error when task belongs to different user', async () => {
+      it('should throw ForbiddenException when task belongs to different user', async () => {
         // Arrange
         const taskId = 1;
         const taskOwnerId = 2;
         const requestingUserId = 1;
-        mockTaskRepository.findByPk.mockResolvedValue({ ...mockTask, userId: taskOwnerId });
+        const dto: UpdateTaskDto = { title: 'Title' };
+        (Task.findByPk as jest.Mock).mockResolvedValue({ ...mockTask, userId: taskOwnerId });
 
-        // Act
-        const result: UpdateTaskResponse = await service.updateTask(taskId, requestingUserId, 'Title', undefined, undefined);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('Task not found');
+        // Act & Assert
+        await expect(service.updateTask(taskId, requestingUserId, dto)).rejects.toThrow(ForbiddenException);
       });
 
-      it('should return error when taskId is invalid', async () => {
-        // Act
-        const result: UpdateTaskResponse = await service.updateTask(null as any, 1, 'Title', undefined, undefined);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('Task ID is required');
-      });
-
-      it('should return error when userId is invalid', async () => {
-        // Act
-        const result: UpdateTaskResponse = await service.updateTask(1, null as any, 'Title', undefined, undefined);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('User ID is required');
-      });
-
-      it('should return error when no update fields provided', async () => {
+      it('should throw ForbiddenException for invalid status value', async () => {
         // Arrange
         const taskId = 1;
         const userId = 1;
-        mockTaskRepository.findByPk.mockResolvedValue({ ...mockTask, userId });
+        const dto: UpdateTaskDto = { status: 'invalid' as any };
+        const mockTaskInstance = {
+          ...mockTask,
+          save: jest.fn().mockResolvedValue(true),
+        };
+        (Task.findByPk as jest.Mock).mockResolvedValue(mockTaskInstance);
 
-        // Act
-        const result: UpdateTaskResponse = await service.updateTask(taskId, userId, undefined, undefined, undefined);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('No update fields provided');
+        // Act & Assert
+        await expect(service.updateTask(taskId, userId, dto)).rejects.toThrow(ForbiddenException);
       });
     });
   });
@@ -435,11 +383,14 @@ describe('TaskService', () => {
         // Arrange
         const taskId = 1;
         const userId = 1;
-        mockTaskRepository.findByPk.mockResolvedValue({ ...mockTask, userId });
-        mockTaskRepository.destroy.mockResolvedValue(1);
+        const mockTaskInstance = {
+          ...mockTask,
+          destroy: jest.fn().mockResolvedValue(true),
+        };
+        (Task.findByPk as jest.Mock).mockResolvedValue(mockTaskInstance);
 
         // Act
-        const result: DeleteTaskResponse = await service.deleteTask(taskId, userId);
+        const result = await service.deleteTask(taskId, userId);
 
         // Assert
         expect(result.success).toBe(true);
@@ -448,51 +399,25 @@ describe('TaskService', () => {
     });
 
     describe('error cases', () => {
-      it('should return error when task not found', async () => {
+      it('should throw NotFoundException when task not found', async () => {
         // Arrange
         const taskId = 999;
         const userId = 1;
-        mockTaskRepository.findByPk.mockResolvedValue(null);
+        (Task.findByPk as jest.Mock).mockResolvedValue(null);
 
-        // Act
-        const result: DeleteTaskResponse = await service.deleteTask(taskId, userId);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('Task not found');
+        // Act & Assert
+        await expect(service.deleteTask(taskId, userId)).rejects.toThrow(NotFoundException);
       });
 
-      it('should return error when task belongs to different user', async () => {
+      it('should throw ForbiddenException when task belongs to different user', async () => {
         // Arrange
         const taskId = 1;
         const taskOwnerId = 2;
         const requestingUserId = 1;
-        mockTaskRepository.findByPk.mockResolvedValue({ ...mockTask, userId: taskOwnerId });
+        (Task.findByPk as jest.Mock).mockResolvedValue({ ...mockTask, userId: taskOwnerId });
 
-        // Act
-        const result: DeleteTaskResponse = await service.deleteTask(taskId, requestingUserId);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('Task not found');
-      });
-
-      it('should return error when taskId is invalid', async () => {
-        // Act
-        const result: DeleteTaskResponse = await service.deleteTask(null as any, 1);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('Task ID is required');
-      });
-
-      it('should return error when userId is invalid', async () => {
-        // Act
-        const result: DeleteTaskResponse = await service.deleteTask(1, null as any);
-
-        // Assert
-        expect(result.success).toBe(false);
-        expect(result.message).toBe('User ID is required');
+        // Act & Assert
+        await expect(service.deleteTask(taskId, requestingUserId)).rejects.toThrow(ForbiddenException);
       });
     });
   });

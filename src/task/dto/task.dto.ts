@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsEnum, MinLength } from 'class-validator';
-import { TaskStatus } from '../../db/models/Task';
+import { TaskStatus } from '../../../db/models/Task';
 
 export class CreateTaskDto {
   @IsString()

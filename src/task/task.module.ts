@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { TaskController } from './task.controller';
 import { TaskService } from './task.service';
-import { Task } from '../db/models/Task';
+import { Task } from '../../db/models/Task';
 import { UserModule } from '../user/user.module';
 
 @Module({
