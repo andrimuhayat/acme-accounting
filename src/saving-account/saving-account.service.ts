@@ -23,6 +23,24 @@ export interface TransactionDTO {
   createdAt: Date;
 }
 
+export interface TransactionSummary {
+  totalDeposits: number;
+  totalWithdrawals: number;
+  transactionCount: number;
+}
+
+export interface AccountReportResponse {
+  accountId: string;
+  accountNumber: string;
+  accountName: string;
+  balance: number;
+  currency: string;
+  transactionSummary: TransactionSummary;
+  recentTransactions: TransactionDTO[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface SavingAccountServiceInterface {
   createAccount(accountName: string, initialDeposit?: number): Promise<SavingAccountDTO>;
   deposit(accountId: string, amount: number, description?: string): Promise<TransactionDTO>;
@@ -30,6 +48,7 @@ export interface SavingAccountServiceInterface {
   getAccount(accountId: string): Promise<SavingAccountDTO | null>;
   getBalance(accountId: string): Promise<number>;
   getTransactions(accountId: string, limit?: number): Promise<TransactionDTO[]>;
+  getAccountReport(accountId: string): Promise<AccountReportResponse>;
 }
 
 @Injectable()
@@ -274,5 +293,61 @@ export class SavingAccountService implements SavingAccountServiceInterface {
 
     const dtos = transactions.map((t) => this.toTransactionDTO(t));
     return limit ? dtos.slice(0, limit) : dtos;
+  }
+
+  /**
+   * Get comprehensive account report with transaction summary
+   * Time complexity: O(n) where n = number of transactions (for aggregation)
+   * @param accountId - The unique account identifier
+   * @returns Account report with transaction summary and recent transactions
+   */
+  async getAccountReport(accountId: string): Promise<AccountReportResponse> {
+    if (!accountId) {
+      throw new Error('Account ID is required');
+    }
+
+    const account = await this.savingAccountModel.findByPk(accountId);
+    if (!account) {
+      throw new Error('Account not found');
+    }
+
+    // Fetch all transactions for the account
+    const transactions = await this.transactionModel.findAll({
+      where: { savingAccountId: accountId },
+      order: [['createdAt', 'DESC']],
+    });
+
+    // Aggregate transaction summary - O(n) single pass
+    let totalDeposits = 0;
+    let totalWithdrawals = 0;
+    let transactionCount = 0;
+
+    for (const txn of transactions) {
+      transactionCount++;
+      if (txn.type === TransactionType.deposit) {
+        totalDeposits += txn.amount;
+      } else if (txn.type === TransactionType.withdrawal) {
+        totalWithdrawals += txn.amount;
+      }
+    }
+
+    // Get last 10 recent transactions
+    const recentTransactions = transactions.slice(0, 10).map((t) => this.toTransactionDTO(t));
+
+    return {
+      accountId: account.id,
+      accountNumber: account.accountNumber,
+      accountName: account.accountName,
+      balance: account.balance,
+      currency: account.currency,
+      transactionSummary: {
+        totalDeposits,
+        totalWithdrawals,
+        transactionCount,
+      },
+      recentTransactions,
+      createdAt: account.createdAt,
+      updatedAt: account.updatedAt,
+    };
   }
 }
