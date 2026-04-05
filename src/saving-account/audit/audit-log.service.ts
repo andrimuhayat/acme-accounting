@@ -12,7 +12,8 @@ export type AuditAction =
   | 'PASSWORD_CHANGE' 
   | 'PASSWORD_RESET' 
   | 'TRANSFER' 
-  | 'ADMIN_ACTION';
+  | 'ADMIN_ACTION'
+  | 'EXPORT';
 
 export interface AuditLogEntry {
   action: AuditAction;
