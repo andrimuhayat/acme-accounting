@@ -10,7 +10,7 @@ describe('AuthService', () => {
   const mockUser = {
     id: 1,
     email: 'test@example.com',
-    passwordHash: '$2b$10$EixzY83h5QXJ5QXJ5QXJ5QeoQOoQOoQOoQOoQOoQOoQOoQOoQOoQO', // 'password123'
+    passwordHash: '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', // 'password123'
     role: 'User',
     companyId: 1,
   };
