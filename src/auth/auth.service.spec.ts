@@ -493,6 +493,105 @@ describe('AuthService', () => {
         expect(result.success).toBe(false);
         expect(result.message).toBe('Invalid or missing token');
       });
+
+      it('should remove session from activeSessions after successful logout', async () => {
+        // Arrange
+        const token = 'token-to-verify-removal';
+        const decoded = { userId: 1, email: 'test@example.com' };
+
+        jest.spyOn(jwt, 'verify').mockImplementation(() => decoded);
+
+        // Manually add session to activeSessions (simulating prior login)
+        (service as any).activeSessions.set(token, { userId: 1, email: 'test@example.com', token, createdAt: new Date() });
+        (service as any).userSessionMap.set(1, token);
+
+        // Verify session exists before logout
+        expect((service as any).activeSessions.has(token)).toBe(true);
+
+        // Act
+        const result = await service.logout(token);
+
+        // Assert
+        expect(result.success).toBe(true);
+        expect((service as any).activeSessions.has(token)).toBe(false);
+        expect((service as any).activeSessions.size).toBe(0);
+      });
+
+      it('should remove session from userSessionMap after successful logout', async () => {
+        // Arrange
+        const token = 'token-to-verify-usermap-removal';
+        const decoded = { userId: 1, email: 'test@example.com' };
+
+        jest.spyOn(jwt, 'verify').mockImplementation(() => decoded);
+
+        // Manually add session to activeSessions and userSessionMap (simulating prior login)
+        (service as any).activeSessions.set(token, { userId: 1, email: 'test@example.com', token, createdAt: new Date() });
+        (service as any).userSessionMap.set(1, token);
+
+        // Verify session exists before logout
+        expect((service as any).userSessionMap.has(1)).toBe(true);
+
+        // Act
+        const result = await service.logout(token);
+
+        // Assert
+        expect(result.success).toBe(true);
+        expect((service as any).userSessionMap.has(1)).toBe(false);
+        expect((service as any).userSessionMap.size).toBe(0);
+      });
+
+      it('should fail logout when jwt is valid but session not in activeSessions', async () => {
+        // Arrange - This tests the bug scenario: jwt.verify succeeds but activeSessions.get(token) returns undefined
+        const token = 'valid-jwt-but-no-session';
+        const decoded = { userId: 1, email: 'test@example.com' };
+
+        // Mock jwt.verify to succeed (token is valid JWT)
+        jest.spyOn(jwt, 'verify').mockImplementation(() => decoded);
+
+        // Do NOT add session to activeSessions - simulating the bug where session lookup fails
+        // (service as any).activeSessions.set(token, {...});  // <-- intentionally NOT adding session
+
+        // Act
+        const result = await service.logout(token);
+
+        // Assert
+        expect(result.success).toBe(false);
+        expect(result.message).toBe('Session not found');
+      });
+
+      it('should handle logout with different tokens for same user correctly', async () => {
+        // Arrange
+        const token1 = 'first-token';
+        const token2 = 'second-token';
+        const decoded1 = { userId: 1, email: 'test@example.com' };
+        const decoded2 = { userId: 1, email: 'test@example.com' };
+
+        jest.spyOn(jwt, 'verify')
+          .mockImplementationOnce(() => decoded1)
+          .mockImplementationOnce(() => decoded2);
+
+        // Setup first session
+        (service as any).activeSessions.set(token1, { userId: 1, email: 'test@example.com', token: token1, createdAt: new Date() });
+        (service as any).userSessionMap.set(1, token1);
+
+        // Act - logout with first token
+        const result1 = await service.logout(token1);
+
+        // Assert
+        expect(result1.success).toBe(true);
+        expect((service as any).activeSessions.has(token1)).toBe(false);
+
+        // Setup second session with same userId (single session enforcement)
+        (service as any).activeSessions.set(token2, { userId: 1, email: 'test@example.com', token: token2, createdAt: new Date() });
+        (service as any).userSessionMap.set(1, token2);
+
+        // Act - logout with second token
+        const result2 = await service.logout(token2);
+
+        // Assert
+        expect(result2.success).toBe(true);
+        expect((service as any).activeSessions.has(token2)).toBe(false);
+      });
     });
   });
 
