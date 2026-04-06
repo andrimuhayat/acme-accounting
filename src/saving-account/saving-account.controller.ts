@@ -10,6 +10,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { SavingAccountService, SavingAccount, Transaction } from './saving-account.service';
+import { ExportService, ExportRequest, ExportResponse } from './export/export.service';
+import { ImportService } from './import/import.service';
+import { ImportSavingAccountDto, ImportResultDto } from './dto/import-saving-account.dto';
 
 /**
  * Request DTOs for Saving Account API
@@ -92,12 +95,18 @@ export interface AccountReportResponse {
  * - Get account details
  * - Get account balance
  * - Get transaction history
+ * - Export accounts to Excel
  * 
  * All operations are O(1) time complexity except getTransactions which is O(n).
+ * Export operations use streaming for O(1) memory regardless of dataset size.
  */
 @Controller('api/v1/saving-account')
 export class SavingAccountController {
-  constructor(private readonly savingAccountService: SavingAccountService) {}
+  constructor(
+    private readonly savingAccountService: SavingAccountService,
+    private readonly exportService: ExportService,
+    private readonly importService: ImportService,
+  ) {}
 
   /**
    * Create a new savings account
@@ -267,38 +276,87 @@ export class SavingAccountController {
   }
 
   /**
-   * Withdraw funds from an account
-   * POST /api/v1/saving-account/:accountId/withdraw
-   * 
-   * @param accountId - The unique account identifier
-   * @param request - { amount: number, description?: string }
-   * @returns Transaction record
-   */
-  @Post(':accountId/withdraw')
-  @HttpCode(HttpStatus.OK)
-  async withdraw(
-    @Param('accountId') accountId: string,
-    @Body() request: WithdrawRequest,
-  ): Promise<TransactionResponse> {
-    try {
-      const transaction = await this.savingAccountService.withdraw(
-        accountId,
-        request.amount,
-        request.description,
-      );
-      return this.toTransactionResponse(transaction);
-    } catch (error) {
-      if (error instanceof Error && error.message === 'Account not found') {
-        throw new NotFoundException(`Account with ID ${accountId} not found`);
-      }
-      if (error instanceof Error && error.message === 'Insufficient balance') {
-        throw new BadRequestException('Insufficient balance for withdrawal');
-      }
-      throw new BadRequestException(
-        error instanceof Error ? error.message : 'Failed to withdraw',
-      );
-    }
-  }
+    * Withdraw funds from an account
+    * POST /api/v1/saving-account/:accountId/withdraw
+    * 
+    * @param accountId - The unique account identifier
+    * @param request - { amount: number, description?: string }
+    * @returns Transaction record
+    */
+   @Post(':accountId/withdraw')
+   @HttpCode(HttpStatus.OK)
+   async withdraw(
+     @Param('accountId') accountId: string,
+     @Body() request: WithdrawRequest,
+   ): Promise<TransactionResponse> {
+     try {
+       const transaction = await this.savingAccountService.withdraw(
+         accountId,
+         request.amount,
+         request.description,
+       );
+       return this.toTransactionResponse(transaction);
+     } catch (error) {
+       if (error instanceof Error && error.message === 'Account not found') {
+         throw new NotFoundException(`Account with ID ${accountId} not found`);
+       }
+       if (error instanceof Error && error.message === 'Insufficient balance') {
+         throw new BadRequestException('Insufficient balance for withdrawal');
+       }
+       throw new BadRequestException(
+         error instanceof Error ? error.message : 'Failed to withdraw',
+       );
+     }
+   }
+
+   /**
+    * Export accounts to Excel
+    * POST /api/v1/saving-account/export
+    * 
+    * High-performance streaming export with batch processing.
+    * Time complexity: O(n) where n = accounts + transactions
+    * Memory: O(batch_size) constant due to streaming
+    * 
+    * @param request - { accountIds?: string[], includeTransactions?: boolean }
+    * @returns Export metadata with file path and record count
+    */
+   @Post('export')
+   @HttpCode(HttpStatus.OK)
+   async exportAccounts(@Body() request: ExportRequest): Promise<ExportResponse> {
+     try {
+       return await this.exportService.exportAccounts(request);
+     } catch (error) {
+       throw new BadRequestException(
+         error instanceof Error ? error.message : 'Failed to export accounts',
+       );
+     }
+   }
+
+   /**
+    * Import accounts from local Excel/CSV file
+    * POST /api/v1/saving-account/import
+    * 
+    * Batch processing with BATCH_SIZE=100 for memory efficiency.
+    * Time complexity: O(n) where n = total rows
+    * Memory: O(batch_size) constant due to batch processing
+    * 
+    * @param dto - { mode: 'local', local_path: string, duplicateStrategy?: 'skip' | 'upsert' | 'error' }
+    * @returns Import result with counts and errors
+    */
+   @Post('import')
+   @HttpCode(HttpStatus.OK)
+   async importAccounts(@Body() dto: ImportSavingAccountDto): Promise<ImportResultDto> {
+     try {
+       return await this.importService.importFromLocalFile(dto);
+     } catch (error) {
+       if (error instanceof Error && error.message.includes('File not found')) {
+         throw new NotFoundException(error.message);
+       }
+       throw new BadRequestException(
+         error instanceof Error ? error.message : 'Failed to import accounts',
+       );
+     }
+   }
 
   /**
    * Transform SavingAccount to AccountResponse

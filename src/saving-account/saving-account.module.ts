@@ -3,6 +3,7 @@ import { SequelizeModule } from '@nestjs/sequelize';
 import { SavingAccountController } from './saving-account.controller';
 import { SavingAccountService } from './saving-account.service';
 import { ExportModule } from './export/export.module';
+import { ImportModule } from './import/import.module';
 import { SavingAccount } from '../db/models/SavingAccount';
 import { Transaction } from '../db/models/Transaction';
 import { AuditLogModule } from './audit/audit-log.module';
@@ -12,6 +13,7 @@ import { AuditLogModule } from './audit/audit-log.module';
     SequelizeModule.forFeature([SavingAccount, Transaction]),
     AuditLogModule,
     ExportModule,
+    ImportModule,
   ],
   controllers: [SavingAccountController],
   providers: [SavingAccountService],
