@@ -218,6 +218,7 @@ export class AuthService {
         };
       }
 
+      // O(1) lookup - token is stored directly as the Map key during login()
       const session = this.activeSessions.get(token);
       if (!session) {
         return {
@@ -226,7 +227,7 @@ export class AuthService {
         };
       }
 
-      // Remove session
+      // Remove session from both Maps (O(1) operations)
       this.activeSessions.delete(token);
       this.userSessionMap.delete(session.userId);
 
@@ -365,3 +366,4 @@ export class AuthService {
     return bcrypt.hash(password, this.BCRYPT_ROUNDS);
   }
 }
+// Test change - modified Sun Apr  5 08:22:46 WIB 2026
