@@ -4,8 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ImportService, DuplicateStrategy, ImportRow, ImportResult } from './import.service';
 import { ImportSavingAccountDto, ImportMode } from '../dto/import-saving-account.dto';
-import { SavingAccount } from '../../db/models/SavingAccount';
-import { Transaction } from '../../db/models/Transaction';
+import { SavingAccount } from '../../../db/models/SavingAccount';
+import { Transaction } from '../../../db/models/Transaction';
 import { AuditLogService } from '../audit/audit-log.service';
 
 describe('ImportService', () => {
@@ -73,7 +73,7 @@ describe('ImportService', () => {
 
   describe('validateFile', () => {
     describe('Basic Validation Scenarios', () => {
-      it('should return valid=true for existing .xlsx file', async () => => {
+      it('should return valid=true for existing .xlsx file', async () => {
         // Arrange - Create a valid Excel file
         const ExcelJS = require('exceljs');
         const workbook = new ExcelJS.Workbook();

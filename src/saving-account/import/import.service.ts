@@ -1,7 +1,6 @@
 import {
   Injectable,
   BadRequestException,
-  FileNotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import * as ExcelJS from 'exceljs';
@@ -110,22 +109,22 @@ export class ImportService {
    * @throws BadRequestException if file format is invalid
    */
   async parseExcel(filePath: string): Promise<ImportRow[]> {
-    // Validate file exists
-    if (!fs.existsSync(filePath)) {
-      throw new FileNotFoundException(`File not found: ${filePath}`);
-    }
-
     const ext = path.extname(filePath).toLowerCase();
     const workbook = new ExcelJS.Workbook();
 
     // Read workbook based on file extension
-    if (ext === '.xlsx' || ext === '.csv') {
-      await workbook.xlsx.readFile(filePath);
-    } else {
+    if (ext !== '.xlsx' && ext !== '.csv') {
       throw new BadRequestException(
         'Unsupported file format. Use .xlsx or .csv',
       );
     }
+
+    // Validate file exists before reading
+    if (!fs.existsSync(filePath)) {
+      throw new BadRequestException(`File not found: ${filePath}`);
+    }
+
+    await workbook.xlsx.readFile(filePath);
 
     const sheet = workbook.getWorksheet(1);
     if (!sheet) {
@@ -217,12 +216,19 @@ export class ImportService {
                 break;
 
               case DuplicateStrategy.UPSERT:
-                // Update existing account
-                await existingAccount.update({
+                // Upsert - update if exists, create if not
+                // For upsert, we use create which will update if accountNumber exists
+                const id = `ACC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+                const now = new Date();
+
+                await this.savingAccountModel.create({
+                  id,
+                  accountNumber: row.accountNumber,
                   accountName: row.accountName,
                   balance: row.balance,
                   currency: row.currency || 'USD',
-                  updatedAt: new Date(),
+                  createdAt: now,
+                  updatedAt: now,
                 });
                 imported++;
                 break;
@@ -279,11 +285,8 @@ export class ImportService {
     // Validate file exists and has valid extension - O(1)
     const validation = await this.validateFile(local_path);
     if (!validation.valid) {
-      if (!fs.existsSync(local_path)) {
-        throw new FileNotFoundException(`File not found: ${local_path}`);
-      }
       throw new BadRequestException(
-        'Invalid file extension. Use .xlsx or .csv',
+        `Invalid file: ${local_path}. File must exist and have .xlsx or .csv extension`,
       );
     }
 

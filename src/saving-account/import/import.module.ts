@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { ImportService } from './import.service';
-import { SavingAccount } from '../../db/models/SavingAccount';
-import { Transaction } from '../../db/models/Transaction';
+import { SavingAccount } from '../../../db/models/SavingAccount';
+import { Transaction } from '../../../db/models/Transaction';
 import { AuditLogModule } from '../audit/audit-log.module';
 
 /**
