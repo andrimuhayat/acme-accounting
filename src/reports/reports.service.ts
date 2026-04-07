@@ -4,6 +4,8 @@ import path from 'path';
 import { performance } from 'perf_hooks';
 import { createReadStream } from 'fs';
 import { createInterface } from 'readline';
+import { User } from '../../db/models/User';
+import { Company } from '../../db/models/Company';
 
 export interface ProcessingState {
   status: 'idle' | 'processing' | 'completed' | 'error';
@@ -30,6 +32,7 @@ export class ReportsService {
     accounts: { status: 'idle', progress: 0 },
     yearly: { status: 'idle', progress: 0 },
     fs: { status: 'idle', progress: 0 },
+    'user-report': { status: 'idle', progress: 0 },
   };
 
   private metrics: Record<string, ProcessingMetrics> = {};
@@ -50,7 +53,10 @@ export class ReportsService {
   }
 
   async accounts(): Promise<void> {
-    return this.processReportAsync('accounts', this.processAccountsReport.bind(this));
+    return this.processReportAsync(
+      'accounts',
+      this.processAccountsReport.bind(this),
+    );
   }
 
   private async processAccountsReport(): Promise<void> {
@@ -58,7 +64,9 @@ export class ReportsService {
     const outputFile = 'out/accounts.csv';
     const accountBalances: Record<string, number> = {};
 
-    const files = fs.readdirSync(tmpDir).filter(file => file.endsWith('.csv'));
+    const files = fs
+      .readdirSync(tmpDir)
+      .filter((file) => file.endsWith('.csv'));
     const totalFiles = files.length;
     let processedFiles = 0;
     let totalRecords = 0;
@@ -71,7 +79,7 @@ export class ReportsService {
     for (const file of files) {
       await this.processFileStreamOptimized(
         path.join(tmpDir, file),
-        (line, lineNumber) => {
+        (line, _lineNumber) => {
           const [, account, , debit, credit] = line.split(',');
           if (account && account.trim()) {
             if (!accountBalances[account]) {
@@ -82,11 +90,15 @@ export class ReportsService {
             accountBalances[account] += debitVal - creditVal;
             totalRecords++;
           }
-        }
+        },
       );
 
       processedFiles++;
-      this.updateProgress('accounts', (processedFiles / totalFiles) * 100, totalRecords);
+      this.updateProgress(
+        'accounts',
+        (processedFiles / totalFiles) * 100,
+        totalRecords,
+      );
 
       // Allow other operations to run
       await this.sleep(1);
@@ -102,7 +114,10 @@ export class ReportsService {
   }
 
   async yearly(): Promise<void> {
-    return this.processReportAsync('yearly', this.processYearlyReport.bind(this));
+    return this.processReportAsync(
+      'yearly',
+      this.processYearlyReport.bind(this),
+    );
   }
 
   private async processYearlyReport(): Promise<void> {
@@ -110,9 +125,9 @@ export class ReportsService {
     const outputFile = 'out/yearly.csv';
     const cashByYear: Record<string, number> = {};
 
-    const files = fs.readdirSync(tmpDir).filter(file =>
-      file.endsWith('.csv') && file !== 'yearly.csv'
-    );
+    const files = fs
+      .readdirSync(tmpDir)
+      .filter((file) => file.endsWith('.csv') && file !== 'yearly.csv');
     const totalFiles = files.length;
     let processedFiles = 0;
     let totalRecords = 0;
@@ -125,7 +140,7 @@ export class ReportsService {
     for (const file of files) {
       await this.processFileStreamOptimized(
         path.join(tmpDir, file),
-        (line, lineNumber) => {
+        (line, _lineNumber) => {
           const [date, account, , debit, credit] = line.split(',');
           if (account === 'Cash' && date) {
             const year = new Date(date).getFullYear();
@@ -139,11 +154,15 @@ export class ReportsService {
               totalRecords++;
             }
           }
-        }
+        },
       );
 
       processedFiles++;
-      this.updateProgress('yearly', (processedFiles / totalFiles) * 100, totalRecords);
+      this.updateProgress(
+        'yearly',
+        (processedFiles / totalFiles) * 100,
+        totalRecords,
+      );
 
       // Allow other operations to run
       await this.sleep(1);
@@ -161,7 +180,54 @@ export class ReportsService {
   }
 
   async fs(): Promise<void> {
-    return this.processReportAsync('fs', this.processFinancialStatementReport.bind(this));
+    return this.processReportAsync(
+      'fs',
+      this.processFinancialStatementReport.bind(this),
+    );
+  }
+
+  /**
+   * Generate user data report (O(n) where n = user count)
+   * Outputs CSV with columns: id,name,role,companyId,companyName
+   */
+  async userReport(): Promise<void> {
+    return this.processReportAsync(
+      'user-report',
+      this.processUserReport.bind(this),
+    );
+  }
+
+  private async processUserReport(): Promise<void> {
+    const outputFile = 'out/user-report.csv';
+
+    // Ensure output directory exists
+    if (!fs.existsSync('out')) {
+      fs.mkdirSync('out', { recursive: true });
+    }
+
+    try {
+      // Query all users with Company relation - O(n) with n = user count
+      const users = await User.findAll({
+        include: [Company],
+        raw: false, // Get Sequelize instances for relation access
+      });
+
+      this.updateProgress('user-report', 50, users.length);
+
+      // Build CSV content
+      const header = 'id,name,role,companyId,companyName';
+      const rows: string[] = [header];
+
+      for (const user of users) {
+        const companyName = user.company?.name || '';
+        rows.push(`${user.id},${user.name},${user.role},${user.companyId},${companyName}`);
+      }
+
+      await fs.promises.writeFile(outputFile, rows.join('\n'));
+    } catch (error) {
+      console.error('Error generating user report:', error.message);
+      throw error;
+    }
   }
 
   private async processFinancialStatementReport(): Promise<void> {
@@ -208,9 +274,9 @@ export class ReportsService {
       }
     }
 
-    const files = fs.readdirSync(tmpDir).filter(file =>
-      file.endsWith('.csv') && file !== 'fs.csv'
-    );
+    const files = fs
+      .readdirSync(tmpDir)
+      .filter((file) => file.endsWith('.csv') && file !== 'fs.csv');
     const totalFiles = files.length;
     let processedFiles = 0;
     let totalRecords = 0;
@@ -223,7 +289,7 @@ export class ReportsService {
     for (const file of files) {
       await this.processFileStreamOptimized(
         path.join(tmpDir, file),
-        (line, lineNumber) => {
+        (line, _lineNumber) => {
           const [, account, , debit, credit] = line.split(',');
           if (balances.hasOwnProperty(account)) {
             const debitVal = parseFloat(String(debit || 0));
@@ -231,11 +297,15 @@ export class ReportsService {
             balances[account] += debitVal - creditVal;
             totalRecords++;
           }
-        }
+        },
       );
 
       processedFiles++;
-      this.updateProgress('fs', (processedFiles / totalFiles) * 100, totalRecords);
+      this.updateProgress(
+        'fs',
+        (processedFiles / totalFiles) * 100,
+        totalRecords,
+      );
 
       // Allow other operations to run
       await this.sleep(1);
@@ -302,7 +372,7 @@ export class ReportsService {
   // Helper Methods for Optimization
   private async processReportAsync(
     reportType: string,
-    processor: () => Promise<void>
+    processor: () => Promise<void>,
   ): Promise<void> {
     try {
       this.states[reportType] = {
@@ -337,11 +407,15 @@ export class ReportsService {
           this.metrics[reportType] = {
             totalExecutionTime: parseFloat(duration),
             recordsProcessed: this.states[reportType].recordsProcessed || 0,
-            filesProcessed: fs.readdirSync('tmp').filter(f => f.endsWith('.csv')).length,
+            filesProcessed: fs
+              .readdirSync('tmp')
+              .filter((f) => f.endsWith('.csv')).length,
             memoryUsage: endMemory,
-            averageRecordsPerSecond: Math.round((this.states[reportType].recordsProcessed || 0) / parseFloat(duration)),
+            averageRecordsPerSecond: Math.round(
+              (this.states[reportType].recordsProcessed || 0) /
+                parseFloat(duration),
+            ),
           };
-
         } catch (error) {
           this.states[reportType] = {
             status: 'error',
@@ -351,7 +425,6 @@ export class ReportsService {
           };
         }
       });
-
     } catch (error) {
       this.states[reportType] = {
         status: 'error',
@@ -363,7 +436,7 @@ export class ReportsService {
 
   private async processFileStreamOptimized(
     filePath: string,
-    lineProcessor: (line: string, lineNumber: number) => void
+    lineProcessor: (line: string, lineNumber: number) => void,
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const fileStream = createReadStream(filePath);
@@ -396,7 +469,11 @@ export class ReportsService {
     });
   }
 
-  private updateProgress(reportType: string, progress: number, recordsProcessed?: number): void {
+  private updateProgress(
+    reportType: string,
+    progress: number,
+    recordsProcessed?: number,
+  ): void {
     if (this.states[reportType]) {
       this.states[reportType].progress = Math.round(progress);
       if (recordsProcessed !== undefined) {
@@ -406,6 +483,6 @@ export class ReportsService {
   }
 
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }

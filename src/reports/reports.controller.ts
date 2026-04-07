@@ -2,7 +2,7 @@ import { Controller, Get, Post, HttpCode, Param, Query, NotFoundException, BadRe
 import { ReportsService } from './reports.service';
 
 // Shared constant - single source of truth for valid report types
-export const REPORT_TYPES = ['accounts', 'yearly', 'fs'] as const;
+export const REPORT_TYPES = ['accounts', 'yearly', 'fs', 'user-report'] as const;
 export type ReportType = typeof REPORT_TYPES[number];
 
 @Controller('api/v1/reports')
@@ -133,6 +133,9 @@ export class ReportsController {
         break;
       case 'fs':
         this.reportsService.fs();
+        break;
+      case 'user-report':
+        this.reportsService.userReport();
         break;
     }
 
